@@ -1,0 +1,13 @@
+name = "docbuild"
+reservoir = false
+packagesDir = "../.lake/packages"
+buildDir = "./build"
+[[require]]
+scope = "leanprover"
+name = "doc-gen4"
+rev = "main"
+
+[[require]]
+name = "Fmtl"
+path = ".."
+
