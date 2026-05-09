@@ -3,9 +3,9 @@ import Fmtl.Spec
 /-!
 Format string parser.
 
-Converts a format string like `"hello {:>10.3x}"` into a
-`List Directive`. All definitions are `@[reducible]` so that
-they can be called at compile time by the `printf` macro.
+Converts a format string like `"hello {:>10.3x}"` into a `List Directive`. All
+definitions are `@[reducible]` so that they can be called at compile time by
+the `printf` macro.
 -/
 
 namespace Fmtl
@@ -61,8 +61,8 @@ private def takeSpec : List Char -> List Char -> List Char × List Char
   | [],          acc => (acc.reverse, [])
 
 /--
-Parse the interior of a `{:...}` specifier (the part after
-the colon) into a `FormatSpec` and `FormatKind`.
+Parse the interior of a `{:...}` specifier (the part after the colon) into a
+`FormatSpec` and `FormatKind`.
 
 Grammar:
 
@@ -153,8 +153,8 @@ private def parseAux : Nat -> List Char -> List Char -> List Directive
 /--
 Parse a format string into a list of `Directive`s.
 
-Handles `{}` placeholders, `{:spec}` specifiers, and
-`{{` / `}}` escape sequences for literal braces.
+Handles `{}` placeholders, `{:spec}` specifiers, and `{{` / `}}` escape
+sequences for literal braces.
 
 Called at compile time by the `printf` macro.
 -/

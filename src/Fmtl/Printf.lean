@@ -7,9 +7,9 @@ import Fmtl.Instances
 /-!
 The `printf` macro.
 
-Parses the format string at compile time and expands into a
-chain of string concatenations, where each placeholder becomes
-a coercion to `FmtArg kind` followed by a call to `.run`.
+Parses the format string at compile time and expands into a chain of string
+concatenations, where each placeholder becomes a coercion to `FmtArg kind`
+followed by a call to `.run`.
 -/
 
 namespace Fmtl
@@ -53,29 +53,33 @@ private def qSpec
   let zp := quote spec.zeroPad
   let width <- qOptNat spec.width
   let prec <- qOptNat spec.precision
-  `({ fill := $fill, align := $align, sign := $sign,
-      alternate := $alt, zeroPad := $zp,
-      width := $width,
-      precision := $prec : FormatSpec })
+  `({
+    fill := $fill,
+    align := $align,
+    sign := $sign,
+    alternate := $alt,
+    zeroPad := $zp,
+    width := $width,
+    precision := $prec : FormatSpec
+  })
 
 end Quoting
 
 /--
 Type-safe string formatting with compile-time parsing.
 
-The format string must be a string literal. Placeholders
-use Rust-style brace syntax:
+The format string must be a string literal. Placeholders use Rust-style brace
+syntax:
 
 ```
 printf "hello {}, {:08x}!" name value
 ```
 
-Each placeholder is matched positionally to the trailing
-arguments. The placeholder's format kind determines which
-type class (`Display`, `LowerHex`, etc.) the argument must
-implement. Argument count mismatches are caught at compile
-time by the macro; type mismatches are caught by the
-elaborator when the `Coe` to `FmtArg` fails.
+Each placeholder is matched positionally to the trailing arguments. The
+placeholder's format kind determines which type class (`Display`, `LowerHex`,
+etc.) the argument must implement. Argument count mismatches are caught at
+compile time by the macro; type mismatches are caught by the elaborator when
+the `Coe` to `FmtArg` fails.
 -/
 scoped syntax "printf" str term:max* : term
 
@@ -93,9 +97,7 @@ scoped macro_rules
         body <- `($body ++ $lit)
       | .placeholder spec kind =>
         if idx >= args.size then
-          let msg :=
-            s!"printf: not enough arguments "
-              ++ s!"(need at least {idx + 1})"
+          let msg := s!"printf: not enough arguments (need at least {idx + 1})"
           Macro.throwError msg
         let arg : TSyntax `term := ⟨args[idx]!⟩
         let specQ <- qSpec spec
@@ -105,8 +107,7 @@ scoped macro_rules
         idx := idx + 1
     if idx != args.size then
       let msg :=
-        s!"printf: too many arguments "
-          ++ s!"(expected {idx}, got {args.size})"
+        s!"printf: too many arguments (expected {idx}, got {args.size})"
       Macro.throwError msg
     return body
 
@@ -124,6 +125,12 @@ example : printf "{{escaped}}" = "{escaped}" := rfl
 example : printf "{}+{}={}" (1 : Nat) (2 : Nat) (3 : Nat) = "1+2=3" := rfl
 example : printf "{}" ([1, 2, 3] : List Nat) = "[1, 2, 3]" := rfl
 example : printf "{}" (#[4, 5] : Array Nat) = "[4, 5]" := rfl
+example : (printf "{:.6}" (2.7182 : Float) == "2.718200") = true :=
+  by native_decide
+example : (printf "{:.2e}" (12345.6789 : Float) == "1.23e+04") = true :=
+  by native_decide
+example : (printf "{:.3}" (1.4142 : Float32) == "1.414") = true :=
+  by native_decide
 
 end Examples
 

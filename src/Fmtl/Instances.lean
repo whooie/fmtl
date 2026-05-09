@@ -5,9 +5,9 @@ import Fmtl.Render
 /-!
 Built-in formatting instances for standard Lean types.
 
-Each instance handles the full `FormatSpec` — sign, alternate
-prefix, precision, width, fill, and alignment — using helper
-functions from `Fmtl.Render`.
+Each instance handles the full `FormatSpec` — sign, alternate prefix,
+precision, width, fill, and alignment — using helper functions from
+`Fmtl.Render`.
 
 Provides instances of:
 
@@ -19,9 +19,9 @@ Provides instances of:
   `ISize`,
 - `LowerExp`, `UpperExp` for `Float`, `Float32`
 
-Each type class instance is accompanied by a corresponding
-`Coe α (FmtArg kind)` instance so that values of these types
-can be passed directly to `printf`.
+Each type class instance is accompanied by a corresponding `Coe α (FmtArg
+kind)` instance so that values of these types can be passed directly to
+`printf`.
 -/
 
 namespace Fmtl
@@ -92,6 +92,119 @@ private def formatFixedFloat
       ++ "."
       ++ String.ofList (s.toList.drop intLen)
 
+private def renderDecimal
+    (dStr : String) (fracDigs : Nat) : String :=
+  let dLen := dStr.length
+  if fracDigs == 0 then dStr
+  else if dLen > fracDigs then
+    let intLen := dLen - fracDigs
+    String.ofList (dStr.toList.take intLen) ++ "."
+      ++ String.ofList (dStr.toList.drop intLen)
+  else
+    let zeros := fracDigs - dLen
+    "0." ++ String.ofList (List.replicate zeros '0')
+      ++ dStr
+
+private def renderSci
+    (dStr : String) (decExp : Int) (expChar : Char) :
+    String :=
+  let chars := dStr.toList
+  let mantissa :=
+    if chars.length <= 1 then dStr
+    else
+      String.ofList [chars[0]!] ++ "."
+        ++ String.ofList (chars.drop 1)
+  let sciExp := decExp + (chars.length : Int) - 1
+  let expNeg := sciExp < 0
+  let expAbs :=
+    if expNeg then (-sciExp).toNat else sciExp.toNat
+  let expStr := toString expAbs
+  let expStr :=
+    if expStr.length < 2 then "0" ++ expStr
+    else expStr
+  let expSign := if expNeg then "-" else "+"
+  s!"{mantissa}{expChar}{expSign}{expStr}"
+
+-- Returns (significantDigits, decimalExponent) where the value is sigDigits *
+-- 10^decExp. Uses big-integer arithmetic for exact decomposition, then finds
+-- the shortest significand that round-trips.
+private def shortestRepr (f : Float) : String × Int :=
+  if f == 0.0 then ("0", 0)
+  else
+    let (m, e) := Float.frExp f
+    let sig := (m * (2.0 ^ (53 : Float))).toUInt64.toNat
+    let exp := e - 53
+    if exp >= 0 then
+      let n := sig * 2 ^ exp.toNat
+      let s := toString n
+      -- Trim trailing zeros from the integer
+      let chars := s.toList.reverse.dropWhile (· == '0')
+      let trimmed := String.ofList chars.reverse
+      let trailingZeros := s.length - trimmed.length
+      -- Verify round-trip
+      if Float.ofScientific trimmed.toNat! false
+          trailingZeros == f
+      then (trimmed, trailingZeros)
+      else (s, 0)
+    else
+      let nexp := (-exp).toNat
+      let allDigits := sig * 5 ^ nexp
+      let chars := (toString allDigits).toList
+      let totalLen := chars.length
+      let rec tryTrim (n : Nat) (fuel : Nat) : Nat :=
+        match fuel with
+        | 0 => totalLen
+        | fuel + 1 =>
+          if n >= totalLen then totalLen
+          else
+            let kept := chars.take n
+            let keptNat := (String.ofList kept).toNat!
+            let roundedNat :=
+              if n < totalLen then
+                if chars[n]!.toNat >= '5'.toNat
+                then keptNat + 1 else keptNat
+              else keptNat
+            let removed := totalLen - n
+            let check :=
+              if removed > nexp then
+                Float.ofScientific roundedNat false
+                  (removed - nexp)
+              else
+                Float.ofScientific roundedNat true
+                  (nexp - removed)
+            if check == f then n
+            else tryTrim (n + 1) fuel
+      let bestLen := tryTrim 1 totalLen
+      let kept := chars.take bestLen
+      let keptNat :=
+        if bestLen < totalLen then
+          let base := (String.ofList kept).toNat!
+          if chars[bestLen]!.toNat >= '5'.toNat
+          then base + 1 else base
+        else (String.ofList kept).toNat!
+      let removed := totalLen - bestLen
+      let decExp :=
+        if removed > nexp then (removed - nexp : Int)
+        else -(nexp - removed : Int)
+      (toString keptNat, decExp)
+
+private def formatShortestFloat (f : Float) : String :=
+  if f == 0.0 then "0"
+  else
+    let (digits, decExp) := shortestRepr f
+    if decExp >= 0 then
+      digits ++ String.ofList
+        (List.replicate decExp.toNat '0')
+    else
+      renderDecimal digits (-decExp).toNat
+
+private def formatShortestSci
+    (f : Float) (expChar : Char) : String :=
+  if f == 0.0 then s!"0{expChar}+00"
+  else
+    let (digits, decExp) := shortestRepr f
+    renderSci digits decExp expChar
+
 private def formatSci
     (f : Float) (prec : Nat) (expChar : Char) :
     String :=
@@ -127,7 +240,8 @@ private def fmtFloatLike
     (f : Float)
     (spec : FormatSpec)
     (kind : FormatKind)
-    (render : Float -> Nat -> String) :
+    (renderFixed : Float → Nat → String)
+    (renderShortest : Float → String) :
     String :=
   if f.isNaN then applySpec spec "" "NaN"
   else if f.isInf then
@@ -135,9 +249,11 @@ private def fmtFloatLike
     applySpec spec pfx "inf"
   else
     let neg := f < 0.0
-    let prec := spec.precision.getD 6
     let pfx := numPrefix spec kind neg
-    applySpec spec pfx (render f.abs prec)
+    let body := match spec.precision with
+      | some prec => renderFixed f.abs prec
+      | none => renderShortest f.abs
+    applySpec spec pfx body
 
 private def formatFixedFloat32
     (f : Float32) (prec : Nat) : String :=
@@ -157,6 +273,86 @@ private def formatFixedFloat32
     String.ofList (s.toList.take intLen)
       ++ "."
       ++ String.ofList (s.toList.drop intLen)
+
+-- Float32 version: decompose with 24-bit mantissa, round-trip via Float for
+-- comparison.
+private def shortestRepr32 (f : Float32) : String × Int :=
+  if f == 0.0 then ("0", 0)
+  else
+    let (m, e) := Float32.frExp f
+    let sig :=
+      (m * (2.0 ^ (24 : Float32))).toUInt64.toNat
+    let exp := e - 24
+    let f64 := f.toFloat
+    if exp >= 0 then
+      let n := sig * 2 ^ exp.toNat
+      let s := toString n
+      let chars := s.toList.reverse.dropWhile (· == '0')
+      let trimmed := String.ofList chars.reverse
+      let trailingZeros := s.length - trimmed.length
+      if Float.ofScientific trimmed.toNat! false
+          trailingZeros == f64
+      then (trimmed, trailingZeros)
+      else (s, 0)
+    else
+      let nexp := (-exp).toNat
+      let allDigits := sig * 5 ^ nexp
+      let chars := (toString allDigits).toList
+      let totalLen := chars.length
+      let rec tryTrim (n : Nat) (fuel : Nat) : Nat :=
+        match fuel with
+        | 0 => totalLen
+        | fuel + 1 =>
+          if n >= totalLen then totalLen
+          else
+            let kept := chars.take n
+            let keptNat := (String.ofList kept).toNat!
+            let roundedNat :=
+              if n < totalLen then
+                if chars[n]!.toNat >= '5'.toNat
+                then keptNat + 1 else keptNat
+              else keptNat
+            let removed := totalLen - n
+            let check :=
+              if removed > nexp then
+                Float.ofScientific roundedNat false
+                  (removed - nexp)
+              else
+                Float.ofScientific roundedNat true
+                  (nexp - removed)
+            if check == f64 then n
+            else tryTrim (n + 1) fuel
+      let bestLen := tryTrim 1 totalLen
+      let kept := chars.take bestLen
+      let keptNat :=
+        if bestLen < totalLen then
+          let base := (String.ofList kept).toNat!
+          if chars[bestLen]!.toNat >= '5'.toNat
+          then base + 1 else base
+        else (String.ofList kept).toNat!
+      let removed := totalLen - bestLen
+      let decExp :=
+        if removed > nexp then (removed - nexp : Int)
+        else -(nexp - removed : Int)
+      (toString keptNat, decExp)
+
+private def formatShortestFloat32
+    (f : Float32) : String :=
+  if f == 0.0 then "0"
+  else
+    let (digits, decExp) := shortestRepr32 f
+    if decExp >= 0 then
+      digits ++ String.ofList
+        (List.replicate decExp.toNat '0')
+    else
+      renderDecimal digits (-decExp).toNat
+
+private def formatShortestSci32
+    (f : Float32) (expChar : Char) : String :=
+  if f == 0.0 then s!"0{expChar}+00"
+  else
+    let (digits, decExp) := shortestRepr32 f
+    renderSci digits decExp expChar
 
 private def formatSci32
     (f : Float32) (prec : Nat) (expChar : Char) :
@@ -193,7 +389,8 @@ private def fmtFloat32Like
     (f : Float32)
     (spec : FormatSpec)
     (kind : FormatKind)
-    (render : Float32 -> Nat -> String) :
+    (renderFixed : Float32 → Nat → String)
+    (renderShortest : Float32 → String) :
     String :=
   if f.isNaN then applySpec spec "" "NaN"
   else if f.isInf then
@@ -201,9 +398,11 @@ private def fmtFloat32Like
     applySpec spec pfx "inf"
   else
     let neg := f < 0.0
-    let prec := spec.precision.getD 6
     let pfx := numPrefix spec kind neg
-    applySpec spec pfx (render f.abs prec)
+    let body := match spec.precision with
+      | some prec => renderFixed f.abs prec
+      | none => renderShortest f.abs
+    applySpec spec pfx body
 
 /- Collection helper -/
 
@@ -247,11 +446,11 @@ instance : Display Int where
 
 instance : Display Float where
   fmt f spec :=
-    fmtFloatLike f spec .display (fun abs prec => formatFixedFloat abs prec)
+    fmtFloatLike f spec .display formatFixedFloat formatShortestFloat
 
 instance : Display Float32 where
   fmt f spec :=
-    fmtFloat32Like f spec .display (fun abs prec => formatFixedFloat32 abs prec)
+    fmtFloat32Like f spec .display formatFixedFloat32 formatShortestFloat32
 
 instance : Display UInt8 where
   fmt n s := Display.fmt n.toNat s
@@ -489,22 +688,30 @@ instance : Coe Int64  (FmtArg .upperHex) := UpperHex.coe
 
 instance : LowerExp Float where
   fmt f spec :=
-    fmtFloatLike f spec .lowerExp (fun abs prec => formatSci abs prec 'e')
+    fmtFloatLike f spec .lowerExp
+      (fun abs prec => formatSci abs prec 'e')
+      (fun abs => formatShortestSci abs 'e')
 
 instance : UpperExp Float where
   fmt f spec :=
-    fmtFloatLike f spec .upperExp (fun abs prec => formatSci abs prec 'E')
+    fmtFloatLike f spec .upperExp
+      (fun abs prec => formatSci abs prec 'E')
+      (fun abs => formatShortestSci abs 'E')
 
 instance : Coe Float (FmtArg .lowerExp) := LowerExp.coe
 instance : Coe Float (FmtArg .upperExp) := UpperExp.coe
 
 instance : LowerExp Float32 where
   fmt f spec :=
-    fmtFloat32Like f spec .lowerExp (fun abs prec => formatSci32 abs prec 'e')
+    fmtFloat32Like f spec .lowerExp
+      (fun abs prec => formatSci32 abs prec 'e')
+      (fun abs => formatShortestSci32 abs 'e')
 
 instance : UpperExp Float32 where
   fmt f spec :=
-    fmtFloat32Like f spec .upperExp (fun abs prec => formatSci32 abs prec 'E')
+    fmtFloat32Like f spec .upperExp
+      (fun abs prec => formatSci32 abs prec 'E')
+      (fun abs => formatShortestSci32 abs 'E')
 
 instance : Coe Float32 (FmtArg .lowerExp) := LowerExp.coe
 instance : Coe Float32 (FmtArg .upperExp) := UpperExp.coe

@@ -25,9 +25,9 @@ inductive Sign where
   deriving Repr, BEq, Inhabited
 
 /--
-Which formatting type class a placeholder requires.
-Each variant maps to one of the seven formatting classes
-(e.g. `display` -> `Display`, `lowerHex` -> `LowerHex`).
+Which formatting type class a placeholder requires. Each variant maps to one of
+the seven formatting classes (e.g. `display` -> `Display`, `lowerHex` ->
+`LowerHex`).
 -/
 inductive FormatKind where
   | display
@@ -40,8 +40,8 @@ inductive FormatKind where
   deriving Repr, BEq, Inhabited
 
 /--
-Parsed representation of a single format specifier's options,
-corresponding to the grammar:
+Parsed representation of a single format specifier's options, corresponding to
+the grammar:
 
 ```
 [[fill]align][sign][#][0][width][.precision]
@@ -60,8 +60,8 @@ structure FormatSpec where
   deriving Repr, Inhabited
 
 /--
-A single element of a parsed format string: either a run of
-literal text or a placeholder with its specifier and kind.
+A single element of a parsed format string: either a run of literal text or a
+placeholder with its specifier and kind.
 -/
 inductive Directive where
   | literal : String -> Directive
