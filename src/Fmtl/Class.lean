@@ -3,17 +3,16 @@ import Fmtl.Spec
 /-!
 Formatting type classes and the `FmtArg` coercion bridge.
 
-Each type class corresponds to one `FormatKind` variant and
-has a single method `fmt : α -> FormatSpec -> String` that is
-responsible for the **complete** formatted output, including
-sign, alternate prefix, precision, width, fill, and alignment.
-Helper functions in `Fmtl.Render` (e.g. `applySpec`,
-`numPrefix`) are available for use within `fmt` implementations.
+Each type class corresponds to one `FormatKind` variant and has a single method
+`fmt : α -> FormatSpec -> String` that is responsible for the **complete**
+formatted output, including sign, alternate prefix, precision, width, fill, and
+alignment. Helper functions in `Fmtl.Render` (e.g. `applySpec`, `numPrefix`)
+are available for use within `fmt` implementations.
 
 ## Registering a custom type
 
-To make a custom type usable with `printf`, implement the
-relevant class and register a `Coe` instance:
+To make a custom type usable with `printf`, implement the relevant class and
+register a `Coe` instance:
 
 ```lean
 instance : Display MyType where
@@ -25,40 +24,34 @@ instance : Coe MyType (FmtArg .display) := Display.coe
 namespace Fmtl
 
 /--
-Default formatting via `{}`. Analogous to Rust's
-`std::fmt::Display`.
+Default formatting via `{}`. Analogous to Rust's `std::fmt::Display`.
 -/
 class Display (α : Type) where
   /--
-  Produce the fully formatted string for `α`, respecting all
-  fields of `spec`.
+  Produce the fully formatted string for `α`, respecting all fields of `spec`.
   -/
   fmt : α -> FormatSpec -> String
 
 /--
-Binary formatting via `{:b}`. Analogous to Rust's
-`std::fmt::Binary`.
+Binary formatting via `{:b}`. Analogous to Rust's `std::fmt::Binary`.
 -/
 class Binary (α : Type) where
   fmt : α -> FormatSpec -> String
 
 /--
-Octal formatting via `{:o}`. Analogous to Rust's
-`std::fmt::Octal`.
+Octal formatting via `{:o}`. Analogous to Rust's `std::fmt::Octal`.
 -/
 class Octal (α : Type) where
   fmt : α -> FormatSpec -> String
 
 /--
-Lower-case hex formatting via `{:x}`. Analogous to Rust's
-`std::fmt::LowerHex`.
+Lower-case hex formatting via `{:x}`. Analogous to Rust's `std::fmt::LowerHex`.
 -/
 class LowerHex (α : Type) where
   fmt : α -> FormatSpec -> String
 
 /--
-Upper-case hex formatting via `{:X}`. Analogous to Rust's
-`std::fmt::UpperHex`.
+Upper-case hex formatting via `{:X}`. Analogous to Rust's `std::fmt::UpperHex`.
 -/
 class UpperHex (α : Type) where
   fmt : α -> FormatSpec -> String
@@ -78,10 +71,9 @@ class UpperExp (α : Type) where
   fmt : α -> FormatSpec -> String
 
 /--
-Type-erased formatting closure, parameterized by `FormatKind`.
-The `printf` macro coerces user arguments to `FmtArg kind`
-via `Coe` instances, which are created using the `.coe`
-helpers below.
+Type-erased formatting closure, parameterized by `FormatKind`. The `printf`
+macro coerces user arguments to `FmtArg kind` via `Coe` instances, which are
+created using the `.coe` helpers below.
 -/
 structure FmtArg (_ : FormatKind) where
   /--
@@ -145,9 +137,9 @@ def UpperExp.coe [UpperExp α] : Coe α (FmtArg .upperExp) :=
   ⟨fun x => ⟨UpperExp.fmt x⟩⟩
 
 /--
-Build a `ToString` instance from a `Display` instance.
-Calls `Display.fmt` with a default `FormatSpec`, so the
-resulting string matches the output of `printf "{}" x`.
+Build a `ToString` instance from a `Display` instance. Calls `Display.fmt` with
+a default `FormatSpec`, so the resulting string matches the output of `printf
+"{}" x`.
 
 Usage:
 `instance : ToString MyType := Display.toToString`

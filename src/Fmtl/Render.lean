@@ -3,18 +3,17 @@ import Fmtl.Spec
 /-!
 Helper functions for implementing `fmt` methods.
 
-These are analogous to Rust's `Formatter::pad` and
-`Formatter::pad_integral` — reusable building blocks that
-handle width, fill, alignment, zero-padding, sign, and
-alternate-mode prefixes so that individual `fmt`
-implementations don't have to reimplement this logic.
+These are analogous to Rust's `Formatter::pad` and `Formatter::pad_integral` —
+reusable building blocks that handle width, fill, alignment, zero-padding,
+sign, and alternate-mode prefixes so that individual `fmt` implementations
+don't have to reimplement this logic.
 -/
 
 namespace Fmtl
 
 /--
-Pad `s` to at least `width` characters using `fill` and
-`align`. Returns `s` unchanged if it is already wide enough.
+Pad `s` to at least `width` characters using `fill` and `align`. Returns `s`
+unchanged if it is already wide enough.
 -/
 def padString
     (s : String)
@@ -50,15 +49,12 @@ def zeroPad (signPrefix : String) (digits : String) (width : Nat) : String :=
 /--
 Apply the full `FormatSpec` to already-rendered core content.
 
-- If `zeroPad` is set, delegates to `zeroPad` for sign-aware
-  zero insertion.
-- Otherwise, concatenates `signPrefix ++ body` and pads with
-  `padString`.
+- If `zeroPad` is set, delegates to `zeroPad` for sign-aware zero insertion.
+- Otherwise, concatenates `signPrefix ++ body` and pads with `padString`.
 
-`signPrefix` should contain any combination of sign character
-and alternate prefix (e.g. `"+0x"`, `"-"`, `""`). Build it
-with `numPrefix`. `body` is the main formatted content
-(digits, mantissa, etc.) without sign or prefix.
+`signPrefix` should contain any combination of sign character and alternate
+prefix (e.g. `"+0x"`, `"-"`, `""`). Build it with `numPrefix`. `body` is the
+main formatted content (digits, mantissa, etc.) without sign or prefix.
 -/
 def applySpec
     (spec : FormatSpec)
@@ -77,10 +73,9 @@ def applySpec
 /--
 Build the sign + alternate-prefix string for a numeric value.
 
-Combines the sign character (from `spec.sign` and `neg`) with
-the alternate-mode prefix (from `spec.alternate` and `kind`).
-For example, `numPrefix spec .lowerHex true` with
-`spec.alternate = true` returns `"-0x"`.
+Combines the sign character (from `spec.sign` and `neg`) with the
+alternate-mode prefix (from `spec.alternate` and `kind`). For example,
+`numPrefix spec .lowerHex true` with `spec.alternate = true` returns `"-0x"`.
 -/
 def numPrefix (spec : FormatSpec) (kind : FormatKind) (neg : Bool) : String :=
   let sign := if neg then "-"
